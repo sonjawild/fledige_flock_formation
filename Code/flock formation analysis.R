@@ -469,22 +469,23 @@ library(ggpubr)
 # Plot Figure:
 
 ggarrange(
-  mod.pred_flock.summer$relationship +
-    labs(x= "Relationship", y= "association strength (SRI)") +
-    ylim(c(0.02,0.10))+
-    theme_bw()+
-    scale_x_discrete(labels=c("adult_juvenile" = "adults", "parent_offspring" = "parents",
-                                        "peers" = "peers", "siblings" = "siblings")),
+  # mod.pred_flock.summer$relationship +
+  #   labs(x= "Relationship", y= "association strength (SRI)") +
+  #   ylim(c(0.02,0.10))+
+  #   theme_bw()+
+  #   scale_x_discrete(labels=c("adult_juvenile" = "adults", "parent_offspring" = "parents",
+  #                                       "peers" = "peers", "siblings" = "siblings")),
 
     mod.pred_flock.summer$time.since.fl +
     labs(x= "Time since fledging [days]", y= "association strength (SRI)") +
-    labs(y= "") +
+  #  labs(y= "") +
     ylim(c(0.02,0.10))+
     theme_bw()+
     geom_line(color="black", lwd=0.8),
 
   mod.pred_flock.summer$space_overlap +
     labs(x= "Space use overlap", y= "association strength (SRI)") +
+    labs(y= "") +
     ylim(c(0.02,0.10))+
     theme_bw()+
     geom_line(color="black", lwd=0.8),
@@ -498,9 +499,13 @@ ggarrange(
     theme(legend.title=element_blank(), legend.position = c(0.78, 0.2))+
     scale_fill_brewer(palette="RdYlBu", breaks=c("adult_juvenile", "parent_offspring", "peers", "siblings"), labels=c("adults", "parents", "peers", "siblings"))+
     scale_color_brewer(palette="RdYlBu", breaks=c("adult_juvenile", "parent_offspring", "peers", "siblings"), labels=c("adults", "parents", "peers", "siblings")),
-  labels= c("a", "b", "c", "d"))
+  ncol=3,
+  nrow=1,
+  legend="right",
+  common.legend = TRUE,
+  labels= c("a", "b", "c"))
 
-ggsave("Output/Figures/Figure_Analysis1.tiff", units="in", width=8, height=7, dpi=300, compression = 'lzw')
+ggsave("Output/Figures/Figure_Analysis1.tiff", units="in", width=8, height=3, dpi=300, compression = 'lzw')
 
 
 # 3) Analysis 2: Flock formation - phenotype (fledglings only) -----------------------------------------
@@ -515,20 +520,20 @@ ggsave("Output/Figures/Figure_Analysis1.tiff", units="in", width=8, height=7, dp
 
 breeders.gmm <- function(gmm, week){
   # we create one empty group by indiviudal matrix for the breeding adults
-  gbi.summer.comb <- matrix(0, ncol=length(GT.breeding.pairs)+1)
-  colnames(gbi.summer.comb) <- c("week", GT.breeding.pairs)
+  gbi.summer.comb <- matrix(0, ncol=length(unique(c(GT.adults, GT.breeding.pairs)))+1)
+  colnames(gbi.summer.comb) <- c("week", unique(c(GT.breeding.pairs, GT.adults)))
   # for each group in the group by individual matrix
   for(i in 1:nrow(gmm$gbi)){
     # add a row to the matrix
-    gbi.summer.comb <- rbind(gbi.summer.comb, rep(0, length(GT.breeding.pairs)+1))
+    gbi.summer.comb <- rbind(gbi.summer.comb, rep(0, length(unique(c(GT.breeding.pairs, GT.adults)))+1))
     gbi.summer.comb[nrow(gbi.summer.comb),] <- 0
     # we save information on which week it was
     gbi.summer.comb[nrow(gbi.summer.comb),"week"] <- week
     # we extract the IDs of who was present in that group
     who.present <- names(which(gmm$gbi[i,]==1))
-    who.present <- subset(who.present, who.present %in% GT.breeding.pairs)
+    who.present <- subset(who.present, who.present %in% unique(c(GT.breeding.pairs, GT.adults)))
     # and add an entry of 1 to the same IDs in our newly created group by individual matrix
-    if(length(who.present>0)){
+    if(length(who.present)>0){
       gbi.summer.comb[nrow(gbi.summer.comb),who.present] <- 1
       
     }
@@ -569,7 +574,7 @@ gbi.breeders <- rbind(breeders.w1,
                       breeders.w13,
                       breeders.w14)
 
-# this now contains a group by individual matrix for breeding adults only
+# this now contains a group by individual matrix for adults only
 
 # 3.1) prepare gmm data ---------------------------------------------------
 # this function extracts associaiton strengths and individual-level covariates (age similarity, weight similarity, association among parents) for each fledgling dyad
@@ -582,9 +587,7 @@ create.df.per.week.fledglings <- function(gmm.data, week){
   
   # create network
   IDs.10sightings <- names(which(colSums(gmm.data$gbi)>=5))
-  # subset to gretis fledglings only that were hatched in the study area
-  IDs.10sightings <- intersect(IDs.10sightings, GT.juveniles.sub)
-  
+
   # we here calculate the space use for each individual (i.e. how many times they have used which feeder)
   space_use <- as.data.frame(matrix(0, ncol=6, nrow=length(IDs.10sightings)))
   rownames(space_use) <- IDs.10sightings
@@ -620,7 +623,7 @@ create.df.per.week.fledglings <- function(gmm.data, week){
     association_index = "SRI",
 #    times = gmm.data$metadata$Start,
     identities = colnames(breeders.sub),
-    which_identities = GT.breeding.pairs
+    which_identities = intersect(c(GT.breeding.pairs, GT.adults),net.data.summer$PIT)
   )
   
   IDs <- rownames(net)
@@ -633,101 +636,158 @@ create.df.per.week.fledglings <- function(gmm.data, week){
   df.net.comb <- df.net
   df.net.comb$week <- week
   
+  # subset to juveniles as focal individuals
+  
+  df.net.comb <- subset(df.net.comb, df.net.comb$ID1 %in% GT.juveniles.sub)
+  
   for(i in 1:length(df.net.comb[,1])){
     ID1 <- df.net.comb[i, "ID1"]
     ID2 <- df.net.comb[i, "ID2"]
+    
+    
     # extract the association strength of ID1 and ID2
     
     ID1.ID2.together <- net[ID1, ID2]
     
     df.net.comb[i, "assoc"] <- ID1.ID2.together
     
-    box.ID1 <- subset(fledgling_data$Box, fledgling_data$Tag==ID1)
-    box.ID2 <- subset(fledgling_data$Box, fledgling_data$Tag==ID2)
     
-    # extract the parents of both IDs
-    parents.ID1 <- subset(fledgling_data$Tag, fledgling_data$Box==box.ID1 & fledgling_data$Who %in% c("Male", "Female"))
-    parents.ID2 <- subset(fledgling_data$Tag, fledgling_data$Box==box.ID2 & fledgling_data$Who %in% c("Male", "Female"))
+    # we extract the space use similarity between individuals 1 and 2
+    space.use.ID1 <- space_use[rownames(space_use) %in% c(ID1),]
+    space.use.ID2 <- space_use[rownames(space_use) %in% c(ID2),]
     
+    time.spent.min <- NULL
     
-    sum.assoc.among.parents <- sum(net.breeders[rownames(net.breeders) %in% c(parents.ID1), colnames(net.breeders) %in% c( parents.ID2)])
-    
-    df.net.comb[i, "sum.assoc.among.parents"] <- sum.assoc.among.parents
-    
-    # extract age 
-    age.diff <- abs(subset(fledgling_data$Fledged, fledgling_data$Tag==ID1)-subset(fledgling_data$Fledged, fledgling_data$Tag==ID2))
-    df.net.comb[i,"age.diff"] <- age.diff
-    
-    # extract sibling status
-    if(box.ID1==box.ID2){
-      df.net.comb[i,"siblings"] <- "yes"
-    } else {
-      df.net.comb[i,"siblings"] <- "no"
+    for(k in 1:6){
+      # at each feeder location, extract how much time they have each spent there
+      feederk.ID1 <- space.use.ID1[k]
+      feederk.ID2 <- space.use.ID2[k]
+      
+      time.spent.min[k] <- min(unlist(c(feederk.ID1, feederk.ID2)))
     }
     
-    # extract fledge weight of ID1 and ID2
-    weight.ID1 <- subset(fledgling_data$Chick.weight, fledgling_data$Tag==ID1)
-    weight.ID2 <- subset(fledgling_data$Chick.weight, fledgling_data$Tag==ID2)
-
-    weight.diff <- abs(weight.ID1-weight.ID2)
-
-    df.net.comb[i, "weight.diff"] <- weight.diff
-
-    # and add the weight of ID1
-    df.net.comb[i, "weight.ID1"] <- weight.ID1
+    # divide by the total number of visits by individual ID1
+    space.overlap <- sum(time.spent.min) / sum(space.use.ID1) 
+    df.net.comb[i, "space_overlap"] <- space.overlap
     
-    # extract relative fledge order - for those without fledge data, we just take 0
-
-    fledge.order.ID1 <- subset(fledgling_data$Fledge.order, fledgling_data$Tag==ID1)
-    fledge.order.ID2 <- subset(fledgling_data$Fledge.order, fledgling_data$Tag==ID2)
+    # extract ID1's age in days in fledging
     
-    # extract max weight of the their clutch
-    max.fledge.order.box.ID1 <- max(na.omit(subset(fledgling_data$Fledge.order, fledgling_data$Box==box.ID1)))
-    max.fledge.order.box.ID2 <- max(na.omit(subset(fledgling_data$Fledge.order, fledgling_data$Box==box.ID2)))
-    
-    if(is.infinite(max.fledge.order.box.ID1)){
-      max.fledge.order.box.ID1 <- NA
-    }
-    
-    if(is.infinite(max.fledge.order.box.ID2)){
-      max.fledge.order.box.ID2 <- NA
-    }
-    
-    # now extract the relative fledge order
-    
-    rel.fledge.order.diff <- abs(fledge.order.ID1/max.fledge.order.box.ID1-fledge.order.ID2/max.fledge.order.box.ID2)
-    
-
-    df.net.comb[i, "rel.fledge.order.diff"] <- rel.fledge.order.diff
-    
-    # add the relative fledge order of ID1
-    df.net.comb[i, "rel.fledge.order.ID1"] <- fledge.order.ID1/max.fledge.order.box.ID1
-   
-     # next we extract the age of ID1 in days since fledging
+    # next we extract the age of ID1 in days since fledging
     # we take the first recording time of that week as the time
-      fledge.date.ID1 <- subset(fledgling_data$Fledged, fledgling_data$Tag==ID1)
-      fledge.date.ID1.date <- as.Date("200401", format="%y%m%d")+fledge.date.ID1
-      days.since.fl.ID1 <- as.numeric(as.Date(substr(gmm.data$metadata$Start[1], 1, 6), format="%y%m%d")-fledge.date.ID1.date)
-      df.net.comb[i, "time.since.fl.ID1"] <- days.since.fl.ID1
-     
+    fledge.date.ID1 <- subset(fledgling_data$Fledged, fledgling_data$Tag==ID1)
+    fledge.date.ID1.date <- as.Date("200401", format="%y%m%d")+fledge.date.ID1
+    days.since.fl.ID1 <- as.numeric(as.Date(substr(gmm.data$metadata$Start[1], 1, 6), format="%y%m%d")-fledge.date.ID1.date)
+    df.net.comb[i, "time.since.fl.ID1"] <- days.since.fl.ID1
+    
+    # extract the parents of ID1
+    box.ID1 <- subset(fledgling_data$Box, fledgling_data$Tag==ID1)
+    parents.ID1 <- subset(fledgling_data$Tag, fledgling_data$Box==box.ID1 & fledgling_data$Who %in% c("Male", "Female"))
+    
+    # if both individuals are juveniles
+    # we extract similarities in phenotypes
+    # and the association rates of their parents
+    if(ID2 %in% GT.juveniles.sub){
+      box.ID1 <- subset(fledgling_data$Box, fledgling_data$Tag==ID1)
+      box.ID2 <- subset(fledgling_data$Box, fledgling_data$Tag==ID2)
       
-       # finally, we extract the space use similarity between individuals 1 and 2
-      space.use.ID1 <- space_use[rownames(space_use) %in% c(ID1),]
-      space.use.ID2 <- space_use[rownames(space_use) %in% c(ID2),]
+      # extract the parents of both IDs
+      parents.ID1 <- subset(fledgling_data$Tag, fledgling_data$Box==box.ID1 & fledgling_data$Who %in% c("Male", "Female"))
+      parents.ID2 <- subset(fledgling_data$Tag, fledgling_data$Box==box.ID2 & fledgling_data$Who %in% c("Male", "Female"))
       
-      time.spent.min <- NULL
       
-      for(k in 1:6){
-        # at each feeder location, extract how much time they have each spent there
-        feederk.ID1 <- space.use.ID1[k]
-        feederk.ID2 <- space.use.ID2[k]
-        
-        time.spent.min[k] <- min(unlist(c(feederk.ID1, feederk.ID2)))
+      sum.assoc.among.parents <- sum(net.breeders[rownames(net.breeders) %in% c(parents.ID1), colnames(net.breeders) %in% c( parents.ID2)])
+      
+      df.net.comb[i, "sum.assoc.among.parents"] <- sum.assoc.among.parents
+      
+      # extract age 
+      age.diff <- abs(subset(fledgling_data$Fledged, fledgling_data$Tag==ID1)-subset(fledgling_data$Fledged, fledgling_data$Tag==ID2))
+      df.net.comb[i,"age.diff"] <- age.diff
+      
+      # extract sibling status
+      if(box.ID1==box.ID2){
+        df.net.comb[i,"siblings"] <- "yes"
+      } else {
+        df.net.comb[i,"siblings"] <- "no"
       }
       
-      # divide by the total number of visits by individual ID1
-      space.overlap <- sum(time.spent.min) / sum(space.use.ID1) 
-      df.net.comb[i, "space_overlap"] <- space.overlap
+      # extract fledge weight of ID1 and ID2
+      weight.ID1 <- subset(fledgling_data$Chick.weight, fledgling_data$Tag==ID1)
+      weight.ID2 <- subset(fledgling_data$Chick.weight, fledgling_data$Tag==ID2)
+      
+      weight.diff <- abs(weight.ID1-weight.ID2)
+      
+      df.net.comb[i, "weight.diff"] <- weight.diff
+      
+      # and add the weight of ID1
+      df.net.comb[i, "weight.ID1"] <- weight.ID1
+      
+      # extract relative fledge order - for those without fledge data, we just take 0
+      
+      fledge.order.ID1 <- subset(fledgling_data$Fledge.order, fledgling_data$Tag==ID1)
+      fledge.order.ID2 <- subset(fledgling_data$Fledge.order, fledgling_data$Tag==ID2)
+      
+      # extract max weight of the their clutch
+      max.fledge.order.box.ID1 <- max(na.omit(subset(fledgling_data$Fledge.order, fledgling_data$Box==box.ID1)))
+      max.fledge.order.box.ID2 <- max(na.omit(subset(fledgling_data$Fledge.order, fledgling_data$Box==box.ID2)))
+      
+      if(is.infinite(max.fledge.order.box.ID1)){
+        max.fledge.order.box.ID1 <- NA
+      }
+      
+      if(is.infinite(max.fledge.order.box.ID2)){
+        max.fledge.order.box.ID2 <- NA
+      }
+      
+      # now extract the relative fledge order
+      
+      rel.fledge.order.diff <- abs(fledge.order.ID1/max.fledge.order.box.ID1-fledge.order.ID2/max.fledge.order.box.ID2)
+      
+      
+      df.net.comb[i, "rel.fledge.order.diff"] <- rel.fledge.order.diff
+      
+      # add the relative fledge order of ID1
+      df.net.comb[i, "rel.fledge.order.ID1"] <- fledge.order.ID1/max.fledge.order.box.ID1
+      
+      # this is only if ID2 is an adult
+      df.net.comb[i, "sum.assoc.with.parents"] <- NA
+    
+      
+    } else if(ID2 %in% c(GT.adults, GT.breeding.pairs) & !(ID2 %in% parents.ID1)){ 
+      # if only ID1 is a juvenile and the other an adult (and not ID1s parents)
+      df.net.comb[i, "sum.assoc.among.parents"] <- NA
+      df.net.comb[i, "age.diff"] <- NA
+      df.net.comb[i, "siblings"] <- NA
+      df.net.comb[i, "weight.diff"] <- NA
+      df.net.comb[i, "weight.ID1"] <- NA
+      df.net.comb[i, "rel.fledge.order.diff"] <- NA
+      df.net.comb[i, "rel.fledge.order.ID1"] <- NA
+      
+      # extract the association betetween ID2 and the parents of ID1
+      
+      # extract the parents of both IDs
+      box.ID1 <- subset(fledgling_data$Box, fledgling_data$Tag==ID1)
+      parents.ID1 <- subset(fledgling_data$Tag, fledgling_data$Box==box.ID1 & fledgling_data$Who %in% c("Male", "Female"))
+    
+      sum.assoc.w.parents <- sum(net.breeders[rownames(net.breeders) %in% c(parents.ID1), colnames(net.breeders) %in% ID2])
+      
+      
+      df.net.comb[i, "sum.assoc.with.parents"] <- sum.assoc.w.parents
+      
+      
+      # relationships with parents
+    } else if(ID2 %in% c(GT.adults, GT.breeding.pairs) & ID2 %in% parents.ID1){
+      
+      df.net.comb[i, "sum.assoc.among.parents"] <- NA
+      df.net.comb[i, "age.diff"] <- NA
+      df.net.comb[i, "siblings"] <- NA
+      df.net.comb[i, "weight.diff"] <- NA
+      df.net.comb[i, "weight.ID1"] <- NA
+      df.net.comb[i, "rel.fledge.order.diff"] <- NA
+      df.net.comb[i, "rel.fledge.order.ID1"] <- NA
+      df.net.comb[i, "sum.assoc.with.parents"] <- NA
+    }
+
+ 
 
   }
   return(df.net.comb)
@@ -772,30 +832,28 @@ df.summer.all.week.fledgies <- rbind(#df.summer.week1,
                             df.summer.week13,
                             df.summer.week14)
 
+#save(df.summer.all.week.fledgies, file="Data/df.summer.all.week.fledgies.RData")
+load("Data/df.summer.all.week.fledgies.RData")
 
-
-# removing siblings
-df.summer.all.week.fledgies <- subset(df.summer.all.week.fledgies, df.summer.all.week.fledgies$siblings=="no")
+# create a df for non-sibling juvenile relationships only removing siblings
+df.summer.all.week.fledgies <- subset(df.summer.all.week.fledgies, df.summer.all.week.fledgies$siblings =="no" ) # will be for model 2
 
 head(df.summer.all.week.fledgies)
 
 length(df.summer.all.week.fledgies$assoc)
 length(unique(df.summer.all.week.fledgies$ID1))
-# 8905 dyads among 65 non-sibling fledgies
-
-# or simply load the data frame here
-#save(df.summer.all.week.fledgies, file="Data/df.summer.all.week.fledgies.RData")
-load("Data/df.summer.all.week.fledgies.RData")
+# 8906 dyads among 65 non-sibling fledgies
 
 # test for multi-collinearity among predictor variables:
 
 library(car)
 
-model.vif <- lm( assoc ~ age.diff + space_overlap + weight.diff + sum.assoc.among.parents, data = df.summer.all.week.fledgies)
+model.vif <- lm( assoc ~ age.diff + space_overlap + weight.diff , data = df.summer.all.week.fledgies)
 
 vif(model.vif)
-# age.diff           space_overlap             weight.diff sum.assoc.among.parents 
-# 1.003203                1.061129                1.003108                1.061074 
+
+# age.diff space_overlap   weight.diff 
+# 1.003159      1.004423      1.003654 
 
 # 3.3) Run brm model ------------------------------------------------------
 
@@ -803,7 +861,7 @@ library(brms)
 library(rstan)
 
 
-# we test whether weight and age difference, and associations among parents predicts associations, while controlling for space use
+# we test whether weight and age difference predict associations, while controlling for space use
 
 # Model 2
 model.phenotype <-
@@ -811,10 +869,8 @@ model.phenotype <-
     assoc ~  scale(age.diff) + 
       space_overlap +
       scale(weight.diff) + 
-      sum.assoc.among.parents +
       scale(age.diff):scale(time.since.fl.ID1) +
       scale(weight.diff):scale(time.since.fl.ID1) +
-      sum.assoc.among.parents:scale(time.since.fl.ID1) +
       (1 |mm(ID1, ID2)) + (1 |ID1) ,
     df.summer.all.week.fledgies,
     family = zero_inflated_beta(),
@@ -837,10 +893,9 @@ pp_check(model.phenotype, ndraws= 1e2)
 # 3.5) Look at effect sizes -----------------------------------------------
 
 summary(model.phenotype)
-
 # Family: zero_inflated_beta 
 # Links: mu = logit; phi = identity; zi = identity 
-# Formula: assoc ~ scale(age.diff) + space_overlap + scale(weight.diff) + sum.assoc.among.parents + scale(age.diff):scale(time.since.fl.ID1) + scale(weight.diff):scale(time.since.fl.ID1) + sum.assoc.among.parents:scale(time.since.fl.ID1) + (1 | mm(ID1, ID2)) + (1 | ID1) 
+# Formula: assoc ~ scale(age.diff) + space_overlap + scale(weight.diff) + scale(age.diff):scale(time.since.fl.ID1) + scale(weight.diff):scale(time.since.fl.ID1) + (1 | mm(ID1, ID2)) + (1 | ID1) 
 # Data: df.summer.all.week.fledgies (Number of observations: 8906) 
 # Draws: 4 chains, each with iter = 6000; warmup = 3000; thin = 1;
 # total post-warmup draws = 12000
@@ -848,27 +903,32 @@ summary(model.phenotype)
 # Group-Level Effects: 
 #   ~ID1 (Number of levels: 65) 
 # Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# sd(Intercept)     0.18      0.04     0.12     0.25 1.00     3693     5784
+# sd(Intercept)     0.19      0.04     0.12     0.27 1.00     3502     6172
 # 
 # ~mmID1ID2 (Number of levels: 65) 
 # Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# sd(Intercept)     0.59      0.07     0.47     0.74 1.00     4234     6783
+# sd(Intercept)     0.60      0.07     0.48     0.75 1.00     4921     7612
 # 
 # Population-Level Effects: 
-#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# Intercept                                         -2.55      0.09    -2.72    -2.38 1.00     3141     4983
-# scaleage.diff                                      0.01      0.02    -0.03     0.04 1.00    12591     9214
-# space_overlap                                      0.82      0.05     0.73     0.91 1.00     9163     9594
-# scaleweight.diff                                   0.01      0.01    -0.01     0.04 1.00    15757     9099
-# sum.assoc.among.parents                            0.13      0.10    -0.08     0.33 1.00    15570     9857
-# scaleage.diff:scaletime.since.fl.ID1              -0.05      0.01    -0.07    -0.02 1.00     7816     9234
-# scaleweight.diff:scaletime.since.fl.ID1           -0.01      0.01    -0.03     0.00 1.00    16768     9006
-# sum.assoc.among.parents:scaletime.since.fl.ID1     0.22      0.06     0.10     0.34 1.00    17001     9215
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS
+# Intercept                                  -2.55      0.09    -2.73    -2.38 1.00     2962
+# scaleage.diff                               0.01      0.02    -0.03     0.04 1.00    13406
+# space_overlap                               0.83      0.05     0.74     0.91 1.00     8623
+# scaleweight.diff                            0.01      0.01    -0.01     0.04 1.00    20558
+# scaleage.diff:scaletime.since.fl.ID1       -0.05      0.01    -0.07    -0.02 1.00     7548
+# scaleweight.diff:scaletime.since.fl.ID1    -0.01      0.01    -0.03     0.01 1.00    20929
+# Tail_ESS
+# Intercept                                   5497
+# scaleage.diff                               9518
+# space_overlap                               9083
+# scaleweight.diff                            9506
+# scaleage.diff:scaletime.since.fl.ID1        9517
+# scaleweight.diff:scaletime.since.fl.ID1     8801
 # 
 # Family Specific Parameters: 
 #   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# phi    13.02      0.26    12.52    13.55 1.00    17462     9030
-# zi      0.39      0.01     0.38     0.40 1.00    18756     8429
+# phi    13.01      0.26    12.51    13.52 1.00    20226     8336
+# zi      0.39      0.01     0.38     0.40 1.00    22492     8457
 # 
 # Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
 # and Tail_ESS are effective sample size measures, and Rhat is the potential
@@ -878,14 +938,12 @@ summary(model.phenotype)
 exp(fixef(model.phenotype))
 
 # Estimate Est.Error       Q2.5      Q97.5
-# Intercept                                      0.07810865  1.091302 0.06584211 0.09264977
-# scaleage.diff                                  1.00809198  1.017832 0.97351722 1.04408775
-# space_overlap                                  2.28168204  1.047079 2.08409749 2.49463418
-# scaleweight.diff                               1.01478694  1.012807 0.98948435 1.04001557
-# sum.assoc.among.parents                        1.13679769  1.110231 0.92651394 1.39405605
-# scaleage.diff:scaletime.since.fl.ID1           0.95400257  1.012249 0.93110256 0.97619348
-# scaleweight.diff:scaletime.since.fl.ID1        0.98641550  1.009487 0.96848254 1.00472762
-# sum.assoc.among.parents:scaletime.since.fl.ID1 1.24828826  1.063517 1.10543322 1.40996763
+# Intercept                               0.07788493  1.092704 0.06550054 0.09249411
+# scaleage.diff                           1.00925954  1.017571 0.97509184 1.04449842
+# space_overlap                           2.28248452  1.046832 2.08658581 2.49219030
+# scaleweight.diff                        1.01334401  1.012876 0.98825883 1.03890777
+# scaleage.diff:scaletime.since.fl.ID1    0.95240908  1.012863 0.92818883 0.97581980
+# scaleweight.diff:scaletime.since.fl.ID1 0.98893812  1.009474 0.97092892 1.00734307
 
 
 # 3.6) Create a figure ----------------------------------------------------
@@ -894,16 +952,15 @@ exp(fixef(model.phenotype))
 int.conditions <- list(
   time.since.fl.ID1 = setNames(c(10,30,60), c(10,30,60)),
   age.diff = setNames(c(0,20,40), c(0,20,40)),
-  weight.diff = setNames(c(1,3,5), c(1,3,5)),
-  sum.assoc.among.parents = setNames(c(0,0.25, 0.5), c(0,0.25, 0.5))
+  weight.diff = setNames(c(1,3,5), c(1,3,5))
 )
 
 
 pl.phenotype  <- plot(conditional_effects(model.phenotype, c("age.diff", "weight.diff", "space_overlap",
-                                                             "sum.assoc.among.parents",
+                                                             
                                                              "time.since.fl.ID1:age.diff",
-                                                             "time.since.fl.ID1:weight.diff",
-                                                             "time.since.fl.ID1:sum.assoc.among.parents"), 
+                                                             "time.since.fl.ID1:weight.diff"
+                                                             ), 
                                           int_conditions = int.conditions))
 
 library(ggpubr)
@@ -911,13 +968,6 @@ library(ggpubr)
 
 ggarrange(
 
-  # pl.phenotype$space_overlap+
-  #   labs(x= "Space use overlap", y= "association strength (SRI)") +
-  #   ylim(c(0.0,0.11))+
-  #   theme_bw()+
-  #   ylab("association strength (SRI)")+
-  #   geom_line(colour="black", lwd=1),
-  
   #  age difference
   pl.phenotype$age.diff +
     labs(x= "Age difference [days]", y= "") +
@@ -934,15 +984,7 @@ ggarrange(
     theme_bw()+
     geom_line(colour="black", lwd=1),
   
-  pl.phenotype$sum.assoc.among.parents+
-    labs(x= "Assoc. between parents", y= "") +
-    ylim(c(0.0,0.106))+
-    theme_bw()+
-    ylab("")+
-    geom_line(colour="black", lwd=1),
 
-
-  
   # age similarity over time
   pl.phenotype$`time.since.fl.ID1:age.diff` +
     labs(x= "Time since fledging [days]", y= "association strength (SRI)") +
@@ -952,8 +994,7 @@ ggarrange(
     theme(legend.position = c(0.73, 0.25), legend.text = element_text(size=8))+
     scale_fill_brewer(palette="RdYlBu", breaks=c(0, 20, 40), labels=c(0, 20, 40), name = "age diff [days]")+
     scale_color_brewer(palette="RdYlBu", breaks=c(0, 20, 40), labels=c(0, 20, 40), name = "age diff [days]")+
-    theme(legend.title = element_text(size=10),legend.key = element_rect(fill = "white"))
-,
+    theme(legend.title = element_text(size=10),legend.key = element_rect(fill = "white")),
   
 # age similarity over time
 pl.phenotype$`time.since.fl.ID1:weight.diff` +
@@ -965,35 +1006,247 @@ pl.phenotype$`time.since.fl.ID1:weight.diff` +
   theme(legend.position = c(0.73, 0.25), legend.text = element_text(size=8))+
   scale_fill_brewer(palette="RdYlBu", breaks=c(1, 3, 5), labels=c(1, 3, 5), name = "weight diff [g]")+
   scale_color_brewer(palette="RdYlBu", breaks=c(1, 3, 5), labels=c(1, 3, 5), name = "weight diff [g]")+
-  theme(legend.title = element_text(size=10),legend.key = element_rect(fill = "white"))
-,
-# assoc parents over time
-pl.phenotype$`time.since.fl.ID1:sum.assoc.among.parents` +
-  labs(x= "Time since fledging [days]", y= "") +
-  labs(y= "") +
-  ylim(c(0.02,0.106))+
-  theme_bw()+
-  #  theme( legend.background=element_blank())+
-  theme(legend.position = c(0.73, 0.25), legend.text = element_text(size=8))+
-  scale_fill_brewer(palette="RdYlBu", breaks=c(0, 0.25, 0.5), labels=c(0, 0.25, 0.5), name = "assoc. parents")+
-  scale_color_brewer(palette="RdYlBu", breaks=c(0, 0.25, 0.5), labels=c(0, 0.25, 0.5), name = "assoc. parents")+
-  theme(legend.title = element_text(size=10),legend.key = element_rect(fill = "white"))
-,
+  theme(legend.title = element_text(size=10),legend.key = element_rect(fill = "white")),
  
-  labels= c("a", "b", "c", "d", "e", "f")
+  labels= c("a", "b", "c", "d")
   
 
 )
 
-ggsave("Output/Figures/Figure_Analysis2.tiff", units="in", width=9, height=6, dpi=300, compression = 'lzw')
+ggsave("Output/Figures/Figure_Analysis2.tiff", units="in", width=6, height=6, dpi=300, compression = 'lzw')
 
 
 
+# 4 ) Inheritance of parental associations -----------------------------
+# Analysis 3
+# load the data frame (same as for model 2)
 
-# 4) Analysis 3: Assortment by age across seasons -------------------------------------------------
+load("Data/df.summer.all.week.fledgies.RData")
+
+# subset to juvenile-adult relationships only
+df.summer.all.week.fledgies.inh.adults <- subset(df.summer.all.week.fledgies, is.na(df.summer.all.week.fledgies$siblings ) & !(is.na(df.summer.all.week.fledgies$sum.assoc.with.parents))) # will be for model 3
+
+length(df.summer.all.week.fledgies.inh.adults$assoc)
+#7415 dyads
+length(unique(df.summer.all.week.fledgies.inh.adults$ID1))
+length(unique(df.summer.all.week.fledgies.inh.adults$ID2))
+# 65 fledlings with 60 non-parent adults
 
 
-# 4.1) Prepare network data set --------------------------------------------
+# subset to juvenile-juvenile relationships only
+df.summer.all.week.fledgies.inh <- subset(df.summer.all.week.fledgies, df.summer.all.week.fledgies$siblings=="no" ) # will be for model 4
+
+length(df.summer.all.week.fledgies.inh$assoc)
+# 8906 dyads
+length(unique(df.summer.all.week.fledgies.inh$ID1))
+# 65 fledglings
+
+# 4.1.) Inheritance of social networks between juvenile and adult ----------------------------------------------------
+# Model 3
+library(car)
+
+model.vif <- lm( assoc ~ space_overlap + sum.assoc.with.parents , data = df.summer.all.week.fledgies.inh.adults)
+
+vif(model.vif)
+
+# space_overlap sum.assoc.with.parents 
+# 1.285957               1.285957 
+
+
+library(brms)
+library(rstan)
+
+
+# we test whether associaitons between adult and parents predict association between adult and juvenile, while controlling for space use
+
+# Model 3
+model.inh.ad <-
+  brms::brm(
+    assoc ~  sum.assoc.with.parents + 
+      space_overlap +
+      sum.assoc.with.parents:scale(time.since.fl.ID1) +
+      (1 |mm(ID1, ID2)) + (1 |ID1) ,
+    df.summer.all.week.fledgies.inh.adults,
+    family = zero_inflated_beta(),
+#    prior=   c(prior(normal(0, 2), class= Intercept),
+#               prior(normal(0,  5), class= b)),
+    control = list(adapt_delta = .99), # set higher because of divergent transitions
+    chains=4,
+    iter=6000,
+    cores = 6
+  )
+
+save(model.inh.ad, file="Output/Analysis 3/model.fl.formation.inh.ad.RDA")
+load("Output/Analysis 3/model.fl.formation.inh.ad.RDA")
+
+
+plot(model.inh.ad)
+
+# and posterior predictive checks
+pp_check(model.inh.ad, ndraws= 1e2)
+
+summary(model.inh.ad)
+# Family: zero_inflated_beta 
+# Links: mu = logit; phi = identity; zi = identity 
+# Formula: assoc ~ sum.assoc.with.parents + space_overlap + sum.assoc.with.parents:scale(time.since.fl.ID1) + (1 | mm(ID1, ID2)) + (1 | ID1) 
+# Data: df.summer.all.week.fledgies.inh.adults (Number of observations: 7415) 
+# Draws: 4 chains, each with iter = 6000; warmup = 3000; thin = 1;
+# total post-warmup draws = 12000
+# 
+# Group-Level Effects: 
+#   ~ID1 (Number of levels: 65) 
+# Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sd(Intercept)     0.09      0.06     0.00     0.22 1.00      784     2273
+# 
+# ~mmID1ID2 (Number of levels: 125) 
+# Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sd(Intercept)     0.44      0.05     0.34     0.55 1.00     2216     4148
+# 
+# Population-Level Effects: 
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS
+# Intercept                                        -2.59      0.06    -2.71    -2.47 1.00     5014
+# sum.assoc.with.parents                           -0.03      0.20    -0.43     0.38 1.00    11686
+# space_overlap                                     0.69      0.05     0.60     0.78 1.00    14294
+# sum.assoc.with.parents:scaletime.since.fl.ID1     0.83      0.10     0.64     1.02 1.00    20797
+# Tail_ESS
+# Intercept                                         7169
+# sum.assoc.with.parents                            9768
+# space_overlap                                    10047
+# sum.assoc.with.parents:scaletime.since.fl.ID1     9035
+# 
+# Family Specific Parameters: 
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# phi    18.21      0.47    17.32    19.14 1.00    19804     8458
+# zi      0.55      0.01     0.54     0.56 1.00    24907     8474
+# 
+# Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
+# and Tail_ESS are effective sample size measures, and Rhat is the potential
+# scale reduction factor on split chains (at convergence, Rhat = 1).
+
+
+exp(fixef(model.inh.ad))
+# Estimate Est.Error       Q2.5     Q97.5
+# Intercept                                     0.07534555  1.060789 0.06683017 0.0842368
+# sum.assoc.with.parents                        0.97440694  1.226645 0.64913232 1.4573657
+# space_overlap                                 2.00131563  1.047380 1.82878498 2.1894189
+# sum.assoc.with.parents:scaletime.since.fl.ID1 2.28738414  1.101939 1.89040212 2.7611296
+
+
+# create a plot
+# setting the conditions for plotting
+int.conditions <- list(
+  time.since.fl.ID1 = setNames(c(10,30,60), c(10,30,60)),
+  sum.assoc.with.parents = setNames(c(0,0.25, 0.5), c(0,0.25, 0.5))
+)
+
+
+pl.inh.ad <- plot(conditional_effects(model.inh.ad, c("time.since.fl.ID1:sum.assoc.with.parents"), int_conditions = int.conditions))
+
+
+
+# 4.2.) Inheritance of social networks among juveniles ----------------------------------------------------
+# Model 4
+library(car)
+
+model.vif <- lm( assoc ~ space_overlap + sum.assoc.among.parents , data = df.summer.all.week.fledgies.inh)
+
+vif(model.vif)
+
+# space_overlap sum.assoc.among.parents 
+# 1.058401                1.058401
+
+
+library(brms)
+library(rstan)
+
+
+# we test whether associaitons among parents predict association juveniles, while controlling for space use
+
+# Model 4
+model.inh.juv <-
+  brms::brm(
+    assoc ~  sum.assoc.among.parents + 
+      space_overlap +
+      sum.assoc.among.parents:scale(time.since.fl.ID1) +
+      (1 |mm(ID1, ID2)) + (1 |ID1) ,
+    df.summer.all.week.fledgies.inh,
+    family = zero_inflated_beta(),
+    #    prior=   c(prior(normal(0, 2), class= Intercept),
+    #               prior(normal(0,  5), class= b)),
+   # control = list(adapt_delta = .99), # set higher because of divergent transitions
+    chains=4,
+    iter=6000,
+    cores = 6
+  )
+
+save(model.inh.juv, file="Output/Analysis 3/model.fl.formation.inh.juv.RDA")
+load("Output/Analysis 3/model.fl.formation.inh.juv.RDA")
+
+
+plot(model.inh.juv)
+
+# and posterior predictive checks
+pp_check(model.inh.juv, ndraws= 1e2)
+
+summary(model.inh.juv)
+# Family: zero_inflated_beta 
+# Links: mu = logit; phi = identity; zi = identity 
+# Formula: assoc ~ sum.assoc.among.parents + space_overlap + sum.assoc.among.parents:scale(time.since.fl.ID1) + (1 | mm(ID1, ID2)) + (1 | ID1) 
+# Data: df.summer.all.week.fledgies.inh (Number of observations: 8906) 
+# Draws: 4 chains, each with iter = 6000; warmup = 3000; thin = 1;
+# total post-warmup draws = 12000
+# 
+# Group-Level Effects: 
+#   ~ID1 (Number of levels: 65) 
+# Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sd(Intercept)     0.14      0.03     0.09     0.20 1.00     3780     6392
+# 
+# ~mmID1ID2 (Number of levels: 65) 
+# Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sd(Intercept)     0.63      0.07     0.50     0.78 1.00     4220     7055
+# 
+# Population-Level Effects: 
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS
+# Intercept                                         -2.53      0.09    -2.71    -2.36 1.00     2367
+# sum.assoc.among.parents                            0.12      0.11    -0.09     0.33 1.00    14619
+# space_overlap                                      0.79      0.05     0.70     0.88 1.00     7924
+# sum.assoc.among.parents:scaletime.since.fl.ID1     0.21      0.06     0.09     0.33 1.00    16854
+# Tail_ESS
+# Intercept                                          4223
+# sum.assoc.among.parents                            9426
+# space_overlap                                      8545
+# sum.assoc.among.parents:scaletime.since.fl.ID1     9615
+# 
+# Family Specific Parameters: 
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# phi    12.95      0.25    12.46    13.44 1.00    17849     9148
+# zi      0.39      0.01     0.38     0.40 1.00    20773     8632
+# 
+# Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
+# and Tail_ESS are effective sample size measures, and Rhat is the potential
+# scale reduction factor on split chains (at convergence, Rhat = 1).
+
+exp(fixef(model.inh.juv))
+# Estimate Est.Error       Q2.5      Q97.5
+# Intercept                                      0.07960202  1.093582 0.06659405 0.09466547
+# sum.assoc.among.parents                        1.12539572  1.111518 0.91337654 1.38869146
+# space_overlap                                  2.21281347  1.046505 2.02000332 2.41483046
+# sum.assoc.among.parents:scaletime.since.fl.ID1 1.23756493  1.062250 1.09851113 1.39044023
+
+# create a plot
+# setting the conditions for plotting
+int.conditions <- list(
+  time.since.fl.ID1 = setNames(c(10,30,60), c(10,30,60)),
+  sum.assoc.among.parents = setNames(c(0,0.25, 0.5), c(0,0.25, 0.5))
+)
+
+
+pl.inh.juv <- plot(conditional_effects(model.inh.juv, c("time.since.fl.ID1:sum.assoc.among.parents"), int_conditions = int.conditions))
+
+# 5) Analysis 4: Assortment by age across seasons -------------------------------------------------
+
+
+# 5.1) Prepare network data set --------------------------------------------
 
 gmm.summer.3weeks <- NULL
 gmm.summer.3weeks$gbi <- rbind(gmm.summer.w12$gbi,
@@ -1068,11 +1321,11 @@ length(winter.net$age[winter.net$age=="adult"])
 length(spring.net$age[spring.net$age=="fledgling"])
 length(spring.net$age[spring.net$age=="adult"])
 
-# 4.2) Calculate assortment (analysis 4) --------------------------------------------
+# 5.2) Calculate assortment (analysis 4) --------------------------------------------
 
 library(assortnet)
 
-# summer (Model 3)
+# summer (Model 5)
 assortment.discrete(graph = summer.net$net, types = summer.net$age, weighted=TRUE)
 
 # $r
@@ -1084,7 +1337,7 @@ assortment.discrete(graph = summer.net$net, types = summer.net$age, weighted=TRU
 # fledgling 0.2191463 0.4529655 0.6721118
 # bi        0.3278882 0.6721118 1.0000000
 
-# autumn (Model 4)
+# autumn (Model 6)
 assortment.discrete(graph = autumn.net$net, types = autumn.net$age, weighted=TRUE)
 
 # $r
@@ -1096,7 +1349,7 @@ assortment.discrete(graph = autumn.net$net, types = autumn.net$age, weighted=TRU
 # fledgling 0.2147324 0.3957482 0.6104806
 # bi        0.3895194 0.6104806 1.0000000
 
-# winter (Model 5)
+# winter (Model 7)
 assortment.discrete(graph = winter.net$net, types = winter.net$age, weighted=TRUE)
 
 # $r
@@ -1109,7 +1362,7 @@ assortment.discrete(graph = winter.net$net, types = winter.net$age, weighted=TRU
 # bi        0.4734810 0.5265190 1.000000
 
 
-# spring (Model 6)
+# spring (Model 8)
 assortment.discrete(graph = spring.net$net, types = spring.net$age, weighted=TRUE)
 
 # $r
@@ -1123,7 +1376,7 @@ assortment.discrete(graph = spring.net$net, types = spring.net$age, weighted=TRU
 
 
 
-# 5) Analysis 4: Network stability across seasons -------------------------------------
+# 6) Analysis 5: Network stability across seasons -------------------------------------
 gmm.summer.3weeks <- NULL
 gmm.summer.3weeks$gbi <- rbind(gmm.summer.w12$gbi,
                                gmm.summer.w13$gbi,
@@ -1133,7 +1386,7 @@ gmm.summer.3weeks$metadata <- rbind(gmm.summer.w12$metadata,
                                     gmm.summer.w13$metadata,
                                     gmm.summer.w14$metadata)
 
-# 5.1) Prepare dyadic data ------------------------------------------------
+# 6.1) Prepare dyadic data ------------------------------------------------
 
 
 create.df.gen <- function(gmm.data, season, prev.net=NULL){
@@ -1273,15 +1526,15 @@ length(unique(subset(df.fl.spring.gen$ID1, df.fl.spring.gen$ID1 %in% GT.juvenile
 length(unique(subset(df.fl.spring.gen$ID1, df.fl.spring.gen$ID1 %in% GT.adults& !is.na(df.fl.spring.gen$prev.assoc))))
 
 
-# 5.2. Run brm models -----------------------------------------------------
+# 6.2. Run brm models -----------------------------------------------------
 
 library(brms)
 library(rstan)
 
-# now we run models 7-9 for previous associations predicting association strength
+# now we run models 9-11 for previous associations predicting association strength
 # this reduces the data set to dyads that were observed over two consecutive seasons
 
-# Model 7
+# Model 9
 model.autumn.prev <-
   brms::brm(
     assoc~  prev.assoc*age.ID1 + space_overlap + (1|ID1) + (1 |mm(ID1, ID2)),
@@ -1292,11 +1545,11 @@ model.autumn.prev <-
     cores = 6
   )
 # save the object
-#save(model.autumn.prev, file="Output/Analysis 4/model.autumn.prev.RDA")
-load("Output/Analysis 4/model.autumn.prev.RDA")
+#save(model.autumn.prev, file="Output/Analysis 5/model.autumn.prev.RDA")
+load("Output/Analysis 5/model.autumn.prev.RDA")
 
 
-# Model 8
+# Model 10
 model.winter.prev <-
   brms::brm(
     assoc~  prev.assoc*age.ID1+ space_overlap + (1|ID1) + (1 |mm(ID1, ID2)),
@@ -1307,10 +1560,10 @@ model.winter.prev <-
     cores = 6
   )
 # save the object
-#save(model.winter.prev, file="Output/Analysis 4/model.winter.prev.RDA")
-load("Output/Analysis 4/model.winter.prev.RDA")
+#save(model.winter.prev, file="Output/Analysis 5/model.winter.prev.RDA")
+load("Output/Analysis 5/model.winter.prev.RDA")
 
-# Model 9
+# Model 11
 model.spring.prev <-
   brms::brm(
     assoc~ prev.assoc*age.ID1+ space_overlap + (1|ID1) + (1 |mm(ID1, ID2)),
@@ -1321,14 +1574,14 @@ model.spring.prev <-
     cores = 6
   )
 # save the object
-#save(model.spring.prev, file="Output/Analysis 4/model.spring.prev.RDA")
-load("Output/Analysis 4/model.spring.prev.RDA")
+#save(model.spring.prev, file="Output/Analysis 5/model.spring.prev.RDA")
+load("Output/Analysis 5/model.spring.prev.RDA")
 
-# 5.3) Model checks -------------------------------------------------------
+# 6.3) Model checks -------------------------------------------------------
 
-plot(model.autumn.prev) # Model 7
-plot(model.winter.prev) # Model 8
-plot(model.spring.prev) # Model 9
+plot(model.autumn.prev) # Model 9
+plot(model.winter.prev) # Model 10
+plot(model.spring.prev) # Model 11
 
 # chains seems to have mixed well
 
@@ -1338,9 +1591,9 @@ pp_check(model.winter.prev, ndraws= 1e2) # Model 10
 pp_check(model.spring.prev, ndraws= 1e2) # Model 11
 
 
-# 5.5) Look at effects ----------------------------------------------------
+# 6.5) Look at effects ----------------------------------------------------
 
-# Model 7
+# Model 9
 summary(model.autumn.prev)
 # Family: zero_inflated_beta 
 # Links: mu = logit; phi = identity; zi = identity 
@@ -1375,7 +1628,7 @@ summary(model.autumn.prev)
 # and Tail_ESS are effective sample size measures, and Rhat is the potential
 # scale reduction factor on split chains (at convergence, Rhat = 1).
 
-# get odds for model 7 (autumn)
+# get odds for model 9 (autumn)
 exp(fixef(model.autumn.prev))
 # Estimate Est.Error        Q2.5       Q97.5
 # Intercept                    0.06072894  1.233013 0.039592936  0.09092318
@@ -1385,7 +1638,7 @@ exp(fixef(model.autumn.prev))
 # prev.assoc:age.ID1fledgling  0.05638129  3.421654 0.005024984  0.63524070
 
 
-# Model 8
+# Model 10
  summary(model.winter.prev)
 
  # Family: zero_inflated_beta 
@@ -1421,7 +1674,7 @@ exp(fixef(model.autumn.prev))
  # and Tail_ESS are effective sample size measures, and Rhat is the potential
  # scale reduction factor on split chains (at convergence, Rhat = 1).
  
- # get odds for model 8 (winter)
+ # get odds for model 10 (winter)
  exp(fixef(model.winter.prev))
  
  # Estimate Est.Error        Q2.5       Q97.5
@@ -1432,7 +1685,7 @@ exp(fixef(model.autumn.prev))
  # prev.assoc:age.ID1fledgling  0.88358770  1.519478  0.38370531  2.00128572
  
 
-# Model 9
+# Model 11
 summary(model.spring.prev)
 
 # Family: zero_inflated_beta 
@@ -1468,7 +1721,7 @@ summary(model.spring.prev)
 # and Tail_ESS are effective sample size measures, and Rhat is the potential
 # scale reduction factor on split chains (at convergence, Rhat = 1).
 
-# get odds for model 9 (spring)
+# get odds for model 11 (spring)
 exp(fixef(model.spring.prev))
 
 #                            Estimate Est.Error       Q2.5       Q97.5
@@ -1482,7 +1735,7 @@ exp(fixef(model.spring.prev))
 
 
 
-# 5.6) Make plot ----------------------------------------------------------
+# 6.6) Make plot ----------------------------------------------------------
 
 int.conditions <- list(
   prev.assoc = setNames(c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5), c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5))
@@ -1554,7 +1807,7 @@ mycol2 <- c("#b23714", "#00177e")
  
 
 
-# 6) Plot networks --------------------------------------------------------
+# 7) Plot networks --------------------------------------------------------
 
 
 #install.packages("GGally")
