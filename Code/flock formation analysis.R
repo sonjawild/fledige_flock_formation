@@ -155,16 +155,12 @@ create.df.per.week <- function(gmm.data, week){
     gmm.data$metadata$Location <- substr(gmm.data$metadata$Location, 1,5)
   }
   
-  # create network
-  IDs.10sightings <- names(which(colSums(gmm.data$gbi)>=5))
-  # subset to gretis
-  IDs.10sightings <- intersect(IDs.10sightings, GT.list)
   
   # we here calculate the space use for each individual (i.e. how many times they have used which feeder)
-  space_use <- as.data.frame(matrix(0, ncol=6, nrow=length(IDs.10sightings)))
-  rownames(space_use) <- IDs.10sightings
+  space_use <- as.data.frame(matrix(0, ncol=6, nrow=length(GT.list)))
+  rownames(space_use) <- GT.list
   colnames(space_use) <-   c("Mill1", "Mill2", "Mill3", "Mill4", "Mill5", "Mill6")
-  for(i in IDs.10sightings){
+  for(i in GT.list){
     # extract how many times they were seen at which feeder
     tab.ID1 <- table(gmm.data$metadata$Location[which(gmm.data$gbi[,which(colnames(gmm.data$gbi)%in% i)]==1)])
     for(j in names(tab.ID1)){
@@ -176,7 +172,7 @@ create.df.per.week <- function(gmm.data, week){
   
 
   # subset to those that were hatched in nest boxes (otherwise we don't have age data)
- # IDs.10sightings <- intersect(IDs.10sightings, fledgling_data$Tag)
+ # GT.list <- intersect(GT.list, fledgling_data$Tag)
 
     net <- get_network(
     association_data = gmm.data$gbi,
@@ -184,7 +180,7 @@ create.df.per.week <- function(gmm.data, week){
     association_index = "SRI",
     times = gmm.data$metadata$Start,
     identities = colnames(gmm.data$gbi),
-    which_identities = IDs.10sightings
+    which_identities = GT.list
   )
   
   IDs <- rownames(net)
@@ -208,10 +204,14 @@ create.df.per.week <- function(gmm.data, week){
     
     df.net.comb[i, "assoc"] <- ID1.ID2.together
     
-    # next we extract the overall summed strenght for Ind 1
-        # 
-        # df.net.comb[i, "num.obs.ID1"] <- sum(gmm.data$gbi[,which(colnames(gmm.data$gbi)%in% c(ID1))])
-        # 
+    # extract how often ID1 and ID2 were seen
+    num.sightings.ID1 <- sum(gmm.data$gbi[,ID1])
+    num.sightings.ID2 <- sum(gmm.data$gbi[,ID2])    
+
+    df.net.comb[i, "num.sightings.ID1"] <- num.sightings.ID1
+    df.net.comb[i, "num.sightings.ID2"] <- num.sightings.ID2
+
+        
     # if same age
     age.ID1 <- unique(subset(species.age$Age_in_2020, species.age$Pit==ID1))
     age.ID2 <- unique(subset(species.age$Age_in_2020, species.age$Pit==ID2))
@@ -289,21 +289,16 @@ create.df.per.week <- function(gmm.data, week){
     df.net.comb[i, "space_overlap"] <- space.overlap
     }
    
-  # finally, we control for the total summed strength (as fledglings are expected to increase their associaitons with age)
-  for(i in 1:length(df.net.comb$ID1)){
-    ID1 <- df.net.comb$ID1[i]
-    summed.strength.ID1 <- sum(subset(df.net.comb$assoc, df.net.comb$ID1==ID1))
-    df.net.comb[i, "summed.strength.ID1"] <- summed.strength.ID1
-    
-  }
   
-  df.net.comb[, "rel.assoc"] <- df.net.comb$assoc/df.net.comb$summed.strength.ID1
-  
-  # finally, we subset to fledglings only which hatched in our nest boxes 
+  # we subset to fledglings only which hatched in our nest boxes 
   df.net.comb <- subset(df.net.comb, df.net.comb$ID1 %in% GT.juveniles.sub)
+  
+  # finally, subset to only those seen a minimum of 5 times in this week
+  df.net.comb <- subset(df.net.comb, df.net.comb$num.sightings.ID1>=5 & df.net.comb$num.sightings.ID2>=5)
   
 return(df.net.comb)
   }
+
 
 # we run the function on each gmm object (week 1-14)
 df.summer.week1 <- create.df.per.week(gmm.data=gmm.summer.w1, week=1)
@@ -342,6 +337,14 @@ dim(df.summer.all.week)
 #save(df.summer.all.week, file="df.summer.all.week.RDA")
 load("df.summer.all.week.RDA")
 # this loads the data frame that is generated with the function above
+
+# how many dyads and how many individual birds?
+length(df.summer.all.week[,1])
+# 17188 dyads
+length(which(unique(c(df.summer.all.week$ID1, df.summer.all.week$ID2)) %in% GT.juveniles))
+# 68 juveniles
+length(which(unique(c(df.summer.all.week$ID1, df.summer.all.week$ID2)) %in% GT.adults))
+# 60 adults
 
 # 2.2) Run Bayesian linear regression -------------------------------------
 
@@ -469,23 +472,23 @@ library(ggpubr)
 # Plot Figure:
 
 ggarrange(
-  # mod.pred_flock.summer$relationship +
-  #   labs(x= "Relationship", y= "association strength (SRI)") +
-  #   ylim(c(0.02,0.10))+
-  #   theme_bw()+
-  #   scale_x_discrete(labels=c("adult_juvenile" = "adults", "parent_offspring" = "parents",
-  #                                       "peers" = "peers", "siblings" = "siblings")),
+  mod.pred_flock.summer$relationship +
+    labs(x= "Relationship", y= "association strength (SRI)") +
+    ylim(c(0.02,0.10))+
+    theme_bw()+
+    scale_x_discrete(labels=c("adult_juvenile" = "adults", "parent_offspring" = "parents",
+                                        "peers" = "peers", "siblings" = "siblings")),
 
     mod.pred_flock.summer$time.since.fl +
     labs(x= "Time since fledging [days]", y= "association strength (SRI)") +
-  #  labs(y= "") +
+    labs(y= "") +
     ylim(c(0.02,0.10))+
     theme_bw()+
     geom_line(color="black", lwd=0.8),
 
   mod.pred_flock.summer$space_overlap +
-    labs(x= "Space use overlap", y= "association strength (SRI)") +
-    labs(y= "") +
+    labs(x= "Space use overlap") +
+    labs(y= "association strength (SRI)") +
     ylim(c(0.02,0.10))+
     theme_bw()+
     geom_line(color="black", lwd=0.8),
@@ -499,13 +502,13 @@ ggarrange(
     theme(legend.title=element_blank(), legend.position = c(0.78, 0.2))+
     scale_fill_brewer(palette="RdYlBu", breaks=c("adult_juvenile", "parent_offspring", "peers", "siblings"), labels=c("adults", "parents", "peers", "siblings"))+
     scale_color_brewer(palette="RdYlBu", breaks=c("adult_juvenile", "parent_offspring", "peers", "siblings"), labels=c("adults", "parents", "peers", "siblings")),
-  ncol=3,
-  nrow=1,
-  legend="right",
-  common.legend = TRUE,
-  labels= c("a", "b", "c"))
+  ncol=2,
+  nrow=2,
+#legend="right",
+  common.legend = FALSE,
+  labels= c("a", "b", "c", "d"))
 
-ggsave("Output/Figures/Figure_Analysis1.tiff", units="in", width=8, height=3, dpi=300, compression = 'lzw')
+ggsave("Output/Figures/Figure_Analysis1.tiff", units="in", width=8, height=7, dpi=300, compression = 'lzw')
 
 
 # 3) Analysis 2: Flock formation - phenotype (fledglings only) -----------------------------------------
@@ -697,8 +700,8 @@ create.df.per.week.fledglings <- function(gmm.data, week){
       
       sum.assoc.among.parents <- sum(net.breeders[rownames(net.breeders) %in% c(parents.ID1), colnames(net.breeders) %in% c( parents.ID2)])
       
-      df.net.comb[i, "sum.assoc.among.parents"] <- sum.assoc.among.parents
-      
+      df.net.comb[i, "sum.assoc.parents"] <- sum.assoc.among.parents
+      df.net.comb[i, "type"] <- "peers"
       # extract age 
       age.diff <- abs(subset(fledgling_data$Fledged, fledgling_data$Tag==ID1)-subset(fledgling_data$Fledged, fledgling_data$Tag==ID2))
       df.net.comb[i,"age.diff"] <- age.diff
@@ -749,12 +752,12 @@ create.df.per.week.fledglings <- function(gmm.data, week){
       df.net.comb[i, "rel.fledge.order.ID1"] <- fledge.order.ID1/max.fledge.order.box.ID1
       
       # this is only if ID2 is an adult
-      df.net.comb[i, "sum.assoc.with.parents"] <- NA
+    #  df.net.comb[i, "sum.assoc.with.parents"] <- NA
     
       
     } else if(ID2 %in% c(GT.adults, GT.breeding.pairs) & !(ID2 %in% parents.ID1)){ 
       # if only ID1 is a juvenile and the other an adult (and not ID1s parents)
-      df.net.comb[i, "sum.assoc.among.parents"] <- NA
+   #   df.net.comb[i, "sum.assoc.among.parents"] <- NA
       df.net.comb[i, "age.diff"] <- NA
       df.net.comb[i, "siblings"] <- NA
       df.net.comb[i, "weight.diff"] <- NA
@@ -771,20 +774,21 @@ create.df.per.week.fledglings <- function(gmm.data, week){
       sum.assoc.w.parents <- sum(net.breeders[rownames(net.breeders) %in% c(parents.ID1), colnames(net.breeders) %in% ID2])
       
       
-      df.net.comb[i, "sum.assoc.with.parents"] <- sum.assoc.w.parents
-      
+      df.net.comb[i, "sum.assoc.parents"] <- sum.assoc.w.parents
+      df.net.comb[i, "type"] <- "adult"
       
       # relationships with parents
     } else if(ID2 %in% c(GT.adults, GT.breeding.pairs) & ID2 %in% parents.ID1){
       
-      df.net.comb[i, "sum.assoc.among.parents"] <- NA
+      df.net.comb[i, "sum.assoc.parents"] <- NA
+      df.net.comb[i, "type"] <- NA
       df.net.comb[i, "age.diff"] <- NA
       df.net.comb[i, "siblings"] <- NA
       df.net.comb[i, "weight.diff"] <- NA
       df.net.comb[i, "weight.ID1"] <- NA
       df.net.comb[i, "rel.fledge.order.diff"] <- NA
       df.net.comb[i, "rel.fledge.order.ID1"] <- NA
-      df.net.comb[i, "sum.assoc.with.parents"] <- NA
+   #   df.net.comb[i, "sum.assoc.with.parents"] <- NA
     }
 
  
@@ -1021,52 +1025,48 @@ ggsave("Output/Figures/Figure_Analysis2.tiff", units="in", width=6, height=6, dp
 # Analysis 3
 # load the data frame (same as for model 2)
 
+# have to reload, as we subset it to only juveniles in the previous analysis
 load("Data/df.summer.all.week.fledgies.RData")
 
-# subset to juvenile-adult relationships only
-df.summer.all.week.fledgies.inh.adults <- subset(df.summer.all.week.fledgies, is.na(df.summer.all.week.fledgies$siblings ) & !(is.na(df.summer.all.week.fledgies$sum.assoc.with.parents))) # will be for model 3
-
-length(df.summer.all.week.fledgies.inh.adults$assoc)
-#7415 dyads
-length(unique(df.summer.all.week.fledgies.inh.adults$ID1))
-length(unique(df.summer.all.week.fledgies.inh.adults$ID2))
-# 65 fledlings with 60 non-parent adults
+df.summer.all.week.inh <- subset(df.summer.all.week.fledgies, !is.na(df.summer.all.week.fledgies$sum.assoc.parents))
 
 
-# subset to juvenile-juvenile relationships only
-df.summer.all.week.fledgies.inh <- subset(df.summer.all.week.fledgies, df.summer.all.week.fledgies$siblings=="no" ) # will be for model 4
+# 4.1. Direct inheritance (association with adults) -----------------------
 
-length(df.summer.all.week.fledgies.inh$assoc)
-# 8906 dyads
-length(unique(df.summer.all.week.fledgies.inh$ID1))
-# 65 fledglings
+# subset the data frame to only juvenile/adult associations
+df.summer.all.week.inh.ad <- subset(df.summer.all.week.fledgies, df.summer.all.week.fledgies$type=="adult")
 
-# 4.1.) Inheritance of social networks between juvenile and adult ----------------------------------------------------
-# Model 3
+length(df.summer.all.week.inh.ad$assoc)
+# 7415 dyads
+length(unique(df.summer.all.week.inh.ad$ID1))
+# 65 juvneiles
+length(unique(df.summer.all.week.inh.ad$ID2))
+# 60 adults
+
+# check for multi-collinearity
+model.vif <- lm( assoc ~ space_overlap + sum.assoc.parents + time.since.fl.ID1 , data = df.summer.all.week.inh.ad)
 library(car)
-
-model.vif <- lm( assoc ~ space_overlap + sum.assoc.with.parents , data = df.summer.all.week.fledgies.inh.adults)
-
 vif(model.vif)
+# space_overlap sum.assoc.parents time.since.fl.ID1 
+# 1.287721          1.285966          1.001651 
 
-# space_overlap sum.assoc.with.parents 
-# 1.285957               1.285957 
 
 
+# Run Bayesian linear regression
 library(brms)
 library(rstan)
 
 
-# we test whether associaitons between adult and parents predict association between adult and juvenile, while controlling for space use
+# we test whether associations between adult and parents predict association between adult and juvenile, while controlling for space use
 
-# Model 3
+# Model 3a
 model.inh.ad <-
   brms::brm(
-    assoc ~  sum.assoc.with.parents + 
+    assoc ~  sum.assoc.parents + 
       space_overlap +
-      sum.assoc.with.parents:scale(time.since.fl.ID1) +
+      sum.assoc.parents:scale(time.since.fl.ID1) +
       (1 |mm(ID1, ID2)) + (1 |ID1) ,
-    df.summer.all.week.fledgies.inh.adults,
+    df.summer.all.week.inh.ad,
     family = zero_inflated_beta(),
 #    prior=   c(prior(normal(0, 2), class= Intercept),
 #               prior(normal(0,  5), class= b)),
@@ -1076,7 +1076,7 @@ model.inh.ad <-
     cores = 6
   )
 
-save(model.inh.ad, file="Output/Analysis 3/model.fl.formation.inh.ad.RDA")
+#save(model.inh.ad, file="Output/Analysis 3/model.fl.formation.inh.ad.RDA")
 load("Output/Analysis 3/model.fl.formation.inh.ad.RDA")
 
 
@@ -1145,15 +1145,28 @@ pl.inh.ad <- plot(conditional_effects(model.inh.ad, c("time.since.fl.ID1:sum.ass
 
 
 # 4.2.) Inheritance of social networks among juveniles ----------------------------------------------------
-# Model 4
+# Model 3b
+
+# subset the data frame to only juvenile/adult associations
+df.summer.all.week.inh.fl <- subset(df.summer.all.week.fledgies, df.summer.all.week.fledgies$type=="peers")
+
+length(df.summer.all.week.inh.fl$assoc)
+# 9420 dyads
+length(unique(df.summer.all.week.inh.fl$ID1))
+# 65 juvneiles
+length(unique(df.summer.all.week.inh.fl$ID2))
+# 65 juveniles
+
+
+
 library(car)
 
-model.vif <- lm( assoc ~ space_overlap + sum.assoc.among.parents , data = df.summer.all.week.fledgies.inh)
+model.vif <- lm( assoc ~ space_overlap + sum.assoc.parents + time.since.fl.ID1, data = df.summer.all.week.inh.fl)
 
 vif(model.vif)
 
-# space_overlap sum.assoc.among.parents 
-# 1.058401                1.058401
+# space_overlap sum.assoc.parents time.since.fl.ID1 
+# 1.072248          1.054027          1.023844 
 
 
 library(brms)
@@ -1162,7 +1175,7 @@ library(rstan)
 
 # we test whether associaitons among parents predict association juveniles, while controlling for space use
 
-# Model 4
+# Model 3b
 model.inh.juv <-
   brms::brm(
     assoc ~  sum.assoc.among.parents + 
@@ -1323,57 +1336,66 @@ length(spring.net$age[spring.net$age=="adult"])
 
 # 5.2) Calculate assortment (analysis 4) --------------------------------------------
 
+
 library(assortnet)
 
-# summer (Model 5)
-assortment.discrete(graph = summer.net$net, types = summer.net$age, weighted=TRUE)
 
+# calculate significance by doing node-permutation
+
+set.seed(5)
+
+assortment.function <- function(network){
+    vec.rand <- NULL
+    assort <- assortment.discrete(graph=network$net, types = network$age, weighted = TRUE)
+    object <- NULL
+  for(i in 1:1000){
+    # we use node based permutation
+    rand.phenotype <- sample(network$age)
+    r.rand <- assortment.discrete(graph = network$net, types = rand.phenotype)$r
+    vec.rand[i] <- r.rand
+    
+  }
+    # extract where the real r falls among the computed r (which corresponds to our p value)
+  p <- length(which(vec.rand > assort$r))/1000
+  object$p <- p
+  object$r <- assort$r
+  return(object)
+}
+
+# summer (Model 4a)
+assortment.function(network = summer.net)
+
+# $p
+# [1] 0.099
 # $r
-# [1] 0.00558695
+# [1] 0.00558
+
+# autumn (Model 4b)
+set.seed(10)
+assortment.function(network = autumn.net)
+# $p
+# [1] 0.032
 # 
-# $mixing_matrix
-# adult fledgling        ai
-# adult     0.1087419 0.2191463 0.3278882
-# fledgling 0.2191463 0.4529655 0.6721118
-# bi        0.3278882 0.6721118 1.0000000
-
-# autumn (Model 6)
-assortment.discrete(graph = autumn.net$net, types = autumn.net$age, weighted=TRUE)
-
 # $r
 # [1] 0.09698163
+
+# winter (Model 4c)
+set.seed(8)
+assortment.function(network=winter.net)
+# $p
+# [1] 0.233
 # 
-# $mixing_matrix
-# adult fledgling        ai
-# adult     0.1747870 0.2147324 0.3895194
-# fledgling 0.2147324 0.3957482 0.6104806
-# bi        0.3895194 0.6104806 1.0000000
-
-# winter (Model 7)
-assortment.discrete(graph = winter.net$net, types = winter.net$age, weighted=TRUE)
-
 # $r
 # [1] -0.005050664
+
+# spring (Model 4d)
+set.seed(6)
+assortment.function(network=spring.net)
+# $p
+# [1] 0.267
 # 
-# $mixing_matrix
-# adult fledgling       ai
-# adult     0.2229252 0.2505559 0.473481
-# fledgling 0.2505559 0.2759631 0.526519
-# bi        0.4734810 0.5265190 1.000000
-
-
-# spring (Model 8)
-assortment.discrete(graph = spring.net$net, types = spring.net$age, weighted=TRUE)
-
 # $r
 # [1] -0.01198448
-# 
-# $mixing_matrix
-#               adult fledgling        ai
-# adult     0.2671942 0.2525996 0.5197938
-# fledgling 0.2525996 0.2276065 0.4802062
-# bi        0.5197938 0.4802062 1.0000000
-
 
 
 # 6) Analysis 5: Network stability across seasons -------------------------------------
@@ -1534,7 +1556,7 @@ library(rstan)
 # now we run models 9-11 for previous associations predicting association strength
 # this reduces the data set to dyads that were observed over two consecutive seasons
 
-# Model 9
+# Model 5a
 model.autumn.prev <-
   brms::brm(
     assoc~  prev.assoc*age.ID1 + space_overlap + (1|ID1) + (1 |mm(ID1, ID2)),
@@ -1549,7 +1571,7 @@ model.autumn.prev <-
 load("Output/Analysis 5/model.autumn.prev.RDA")
 
 
-# Model 10
+# Model 5b
 model.winter.prev <-
   brms::brm(
     assoc~  prev.assoc*age.ID1+ space_overlap + (1|ID1) + (1 |mm(ID1, ID2)),
@@ -1563,7 +1585,7 @@ model.winter.prev <-
 #save(model.winter.prev, file="Output/Analysis 5/model.winter.prev.RDA")
 load("Output/Analysis 5/model.winter.prev.RDA")
 
-# Model 11
+# Model 5c
 model.spring.prev <-
   brms::brm(
     assoc~ prev.assoc*age.ID1+ space_overlap + (1|ID1) + (1 |mm(ID1, ID2)),
@@ -1579,21 +1601,21 @@ load("Output/Analysis 5/model.spring.prev.RDA")
 
 # 6.3) Model checks -------------------------------------------------------
 
-plot(model.autumn.prev) # Model 9
-plot(model.winter.prev) # Model 10
-plot(model.spring.prev) # Model 11
+plot(model.autumn.prev) # Model 5a
+plot(model.winter.prev) # Model 5b
+plot(model.spring.prev) # Model 5c
 
 # chains seems to have mixed well
 
 # and posterior predictive checks
-pp_check(model.autumn.prev, ndraws= 1e2) # Model 9
-pp_check(model.winter.prev, ndraws= 1e2) # Model 10
-pp_check(model.spring.prev, ndraws= 1e2) # Model 11
+pp_check(model.autumn.prev, ndraws= 1e2) # Model 5a
+pp_check(model.winter.prev, ndraws= 1e2) # Model 5b
+pp_check(model.spring.prev, ndraws= 1e2) # Model 5c
 
 
 # 6.5) Look at effects ----------------------------------------------------
 
-# Model 9
+# Model 5a
 summary(model.autumn.prev)
 # Family: zero_inflated_beta 
 # Links: mu = logit; phi = identity; zi = identity 
@@ -1628,7 +1650,7 @@ summary(model.autumn.prev)
 # and Tail_ESS are effective sample size measures, and Rhat is the potential
 # scale reduction factor on split chains (at convergence, Rhat = 1).
 
-# get odds for model 9 (autumn)
+# get odds for model 5a (autumn)
 exp(fixef(model.autumn.prev))
 # Estimate Est.Error        Q2.5       Q97.5
 # Intercept                    0.06072894  1.233013 0.039592936  0.09092318
@@ -1638,7 +1660,7 @@ exp(fixef(model.autumn.prev))
 # prev.assoc:age.ID1fledgling  0.05638129  3.421654 0.005024984  0.63524070
 
 
-# Model 10
+# Model 5b
  summary(model.winter.prev)
 
  # Family: zero_inflated_beta 
@@ -1674,7 +1696,7 @@ exp(fixef(model.autumn.prev))
  # and Tail_ESS are effective sample size measures, and Rhat is the potential
  # scale reduction factor on split chains (at convergence, Rhat = 1).
  
- # get odds for model 10 (winter)
+ # get odds for model 5b (winter)
  exp(fixef(model.winter.prev))
  
  # Estimate Est.Error        Q2.5       Q97.5
@@ -1685,7 +1707,7 @@ exp(fixef(model.autumn.prev))
  # prev.assoc:age.ID1fledgling  0.88358770  1.519478  0.38370531  2.00128572
  
 
-# Model 11
+# Model 5c
 summary(model.spring.prev)
 
 # Family: zero_inflated_beta 
@@ -1721,7 +1743,7 @@ summary(model.spring.prev)
 # and Tail_ESS are effective sample size measures, and Rhat is the potential
 # scale reduction factor on split chains (at convergence, Rhat = 1).
 
-# get odds for model 11 (spring)
+# get odds for model 5c (spring)
 exp(fixef(model.spring.prev))
 
 #                            Estimate Est.Error       Q2.5       Q97.5
