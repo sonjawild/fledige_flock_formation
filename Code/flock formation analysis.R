@@ -334,8 +334,8 @@ df.summer.all.week <- rbind(df.summer.week1,
 head(df.summer.all.week)
 dim(df.summer.all.week)
 
-#save(df.summer.all.week, file="df.summer.all.week.RDA")
-load("df.summer.all.week.RDA")
+#save(df.summer.all.week, file="Data/df.summer.all.week.RDA")
+load("Data/df.summer.all.week.RDA")
 # this loads the data frame that is generated with the function above
 
 # how many dyads and how many individual birds?
