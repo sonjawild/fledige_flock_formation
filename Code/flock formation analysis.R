@@ -1659,6 +1659,15 @@ exp(fixef(model.autumn.prev))
 # space_overlap                2.69661174  1.206447 1.877215405  3.91599022
 # prev.assoc:age.ID1fledgling  0.05638129  3.421654 0.005024984  0.63524070
 
+# extract probability
+plogis(fixef(model.autumn.prev))
+
+#                               Estimate Est.Error       Q2.5      Q97.5
+# Intercept                   0.05725208 0.5521746 0.03808504 0.08334517
+# prev.assoc                  0.92524336 0.6845914 0.72746926 0.98202922
+# age.ID1fledgling            0.54029263 0.5574799 0.42580140 0.64585812
+# space_overlap               0.72948200 0.5467827 0.65244173 0.79658218
+# prev.assoc:age.ID1fledgling 0.05337210 0.7738403 0.00499986 0.38846923
 
 # Model 5b
  summary(model.winter.prev)
@@ -1705,6 +1714,14 @@ exp(fixef(model.autumn.prev))
  # age.ID1fledgling             0.92108834  1.272434  0.57555686  1.49177993
  # space_overlap               14.04674428  1.098203 11.70471122 16.89923217
  # prev.assoc:age.ID1fledgling  0.88358770  1.519478  0.38370531  2.00128572
+
+plogis(fixef(model.winter.prev))
+# Estimate Est.Error       Q2.5      Q97.5
+# Intercept                   0.03213937 0.5502053 0.02180173 0.04711906
+# prev.assoc                  0.75402509 0.5698607 0.64081169 0.84225778
+# age.ID1fledgling            0.47946173 0.5599433 0.36530377 0.59868045
+# space_overlap               0.93354044 0.5234016 0.92128904 0.94413168
+# prev.assoc:age.ID1fledgling 0.46909825 0.6030924 0.27730277 0.66680946
  
 
 # Model 5c
@@ -1754,13 +1771,19 @@ exp(fixef(model.spring.prev))
 # prev.assoc:age.ID1fledgling 2.152064  1.481931 0.98977716  4.64999069
 
 
-
-
+plogis(fixef(model.spring.prev))
+# Estimate Est.Error       Q2.5      Q97.5
+# Intercept                   0.02955867 0.5586421 0.01880539 0.04616549
+# prev.assoc                  0.69302278 0.5640137 0.57764945 0.79012880
+# age.ID1fledgling            0.55837673 0.5757821 0.40692955 0.69727156
+# space_overlap               0.89658343 0.5231835 0.87847109 0.91188747
+# prev.assoc:age.ID1fledgling 0.68274760 0.5970879 0.49743116 0.82300856
 
 # 6.6) Make plot ----------------------------------------------------------
 
 int.conditions <- list(
-  prev.assoc = setNames(c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5), c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5))
+  prev.assoc = setNames(c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5), c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5)), 
+  space_overlap = setNames(c(0.5), c(0.5))
 )
 
 
